@@ -323,5 +323,5 @@ plot(south.tall.green, col="blue", add=T, legend=F)
 
 # spatial and temporal autocorr together 
 # Cressian Wikel - textbook
-
+# wavelet analysis for spatial and temporal autocorrelation 
 
