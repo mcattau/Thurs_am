@@ -316,3 +316,12 @@ plot(south.tall.green, col="blue", add=T, legend=F)
 
 ```
 
+
+# calc in raster to compare 2 time periods
+# this will read in NDVI and calculate slope for each pixel
+# make map where each pixel is the slope
+
+# spatial and temporal autocorr together 
+# Cressian Wikel - textbook
+
+
