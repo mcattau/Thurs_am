@@ -292,4 +292,4 @@ plot(south.tall.green)
 south.tall.green[south.tall.green==0]<-NA
 
 # how many pixels is that?
-freq(south.tall.green, value=1) #
+freq(south.tall.green, value=1) #2400
