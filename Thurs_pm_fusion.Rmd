@@ -279,7 +279,7 @@ plot(north.tall.green)
 north.tall.green[north.tall.green==0]<-NA
 
 # how many pixels is that?
-freq(north.tall.green, value=1) #5508
+north.tall.green.count<-freq(north.tall.green, value=1) #5508
 
 
 # same for S-facing
@@ -292,4 +292,27 @@ plot(south.tall.green)
 south.tall.green[south.tall.green==0]<-NA
 
 # how many pixels is that?
-freq(south.tall.green, value=1) #2400
+south.tall.green.count<-freq(south.tall.green, value=1) #2400
+
+# divide the number of pixels that are green by the total north facing pixels
+north.tall.green.frac <- north.tall.green.count/freq(asp.ns, value=1)
+south.tall.green.frac <- south.tall.green.count/freq(asp.ns, value=2)
+
+
+Next steps
+Plot CIR stack with Overlays
+```{r }
+bands<-c(83, 60, 35)
+
+cir.stack<-create_stack(f,
+                        bands=bands,
+                        epsg=epsg)
+plot(cir.stack)
+
+plotRGB(cir.stack, scale=1, stretch="lin")
+
+plot(north.tall.green, col="yellow", add=T, legend=F)
+plot(south.tall.green, col="blue", add=T, legend=F)
+
+```
+
