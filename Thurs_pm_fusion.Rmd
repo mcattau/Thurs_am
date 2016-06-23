@@ -81,7 +81,7 @@ ndvi.stack<-create_stack(f,
 plot(ndvi.stack, main="Bands 60 and 83\n Teakettle, CA")
 
 # Compute NDVI
-ndvi<-(ndvi.stack[[2]]-ndvi.stack[[1]]/ndvi.stack[[2]]+ndvi.stack[[1]])
+ndvi<-(ndvi.stack[[2]]-ndvi.stack[[1]])/(ndvi.stack[[2]]+ndvi.stack[[1]])
 
 # Rename to something informative
 names(ndvi)<-"TEAK_hsiNDVI"
@@ -165,7 +165,7 @@ same_extent<-function(raster1, raster2) {
 same_extent(ndvi, lidar.brick)
 ```
 
-Do we see taller, greener tree on North-facing slopes?
+Do we see taller, greener trees on North-facing slopes?
 ```{r make_NS_object}
 
 # Import NEON aspect (angle a slope is facing)
@@ -247,5 +247,49 @@ all.data.stats<- data.frame(t(summary(values(all.data), na.rm=TRUE)))
 # t transposes
 str(all.data)
 
+ht.mean<-cellStats(all.data$CHM, mean, na.rm=T)
+ht.sd<-cellStats(all.data$CHM, sd, na.rm=T)
+
+# @ is for objects (e.g., can't use @ on a dataframe) and $ is for names element inside
+
+# "Tall" objects are going to be mean + 1 sd
+# Make a thresholds object
+thresholds<-data.frame(id=1)
+thresholds$height<-ht.mean+ht.sd
+
+# time for NDVI
+hist(all.data$NDVI, col="cornflowerblue", main="Distribution of NDVI values \n Teakettle")
+
+# What counts as "green"
+greenRange<-cellStats(all.data$NDVI, range)
+greenRange<- greenRange[2]-greenRange[1]
+
+thresholds$green<-cellStats(all.data$NDVI, max)-greenRange/3
+
+# How many N- and S-facing pixels are there?
+north.count<-freq(asp.ns, value=1)
+south.count<-freq(asp.ns, value=2)
+
+# How many are tall and green?
+north.tall.green<-asp.ns==1 & all.data$NDVI>=thresholds$green & all.data$CHM>=thresholds$height
+
+plot(north.tall.green)
+
+# assign zeros to NAs
+north.tall.green[north.tall.green==0]<-NA
+
+# how many pixels is that?
+freq(north.tall.green, value=1) #5508
 
 
+# same for S-facing
+# How many are tall and green?
+south.tall.green<-asp.ns==2 & all.data$NDVI>=thresholds$green & all.data$CHM>=thresholds$height
+
+plot(south.tall.green)
+
+# assign zeros to NAs
+south.tall.green[south.tall.green==0]<-NA
+
+# how many pixels is that?
+freq(south.tall.green, value=1) #
