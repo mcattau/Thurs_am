@@ -1,0 +1,251 @@
+---
+title: "Thurs_pm_fusion"
+author: "Megan Cattau"
+date: "June 23, 2016"
+output: html_document
+---
+
+Load libraries
+```{r load_library}
+
+# Load the libraries
+library(raster)
+library(rhdf5)
+library(rgdal)
+library(neonAOP)
+```
+
+Import LiDAR data
+```{r import_lidar_data}
+
+# import digital surface model (DSM)
+dsm<-raster("../NEONdata/D17-California/TEAK/2013/lidar/TEAK_lidarDSM.tif")
+
+# import digital terrain model (DTM)
+dtm<-raster("../NEONdata/D17-California/TEAK/2013/lidar/TEAK_lidarDTM.tif")
+
+# import canopy height model (chm)
+chm<-raster("../NEONdata/D17-California/TEAK/2013/lidar/TEAK_lidarCHM.tif")
+plot(chm, main="Canopy Height\n Lower Teakettle, CA")
+
+# look at a histogram of the CHM
+hist(chm, main="Distribution on Canopy Height\n Teakettle, CA", xlab="Tree height (m)", col="springgreen")
+
+# look at loverall image stats. You can't just use mean() because R will then think you want a raster
+cellStats(chm, max) # max tree height is 55.7
+cellStats(chm, mean) # max tree height is 5.6
+cellStats(chm, sd) # max tree height is 10.1
+
+# set 0 values to no data
+# chm[chm==0]<-NA
+```
+
+Stack rasters together
+```{r stack_rasters}
+# stack rasters together
+lidar.brick<-brick(dsm, dtm, chm)
+
+# Look at it
+plot(lidar.brick)
+
+# you can write a function to pass a vector of data
+# use calc command to apply across entire scene
+# e.g., calculating trend lines
+```
+
+Import Hyperspectral data
+```{r import_HI_data}
+
+f<-"../NEONdata/D17-California/TEAK/2013/spectrometer/reflectance/Subset3NIS1_20130614_100459_atmcor.h5"
+
+# id the projection
+# define the CRS definition by EPSG (these correcpond to UTM zones)
+epsg<-32611
+```
+
+Compute NDVI from HI 
+```{r HA_NDVI}
+
+# pull out some of the bands
+bands<-c(60,83)
+
+# look at wavelengths
+wavelengths<-h5read(f, "wavelength") 
+
+# read in bands
+ndvi.stack<-create_stack(f, 
+                         bands=bands,
+                         epsg = epsg)
+
+# plot_to_check
+plot(ndvi.stack, main="Bands 60 and 83\n Teakettle, CA")
+
+# Compute NDVI
+ndvi<-(ndvi.stack[[2]]-ndvi.stack[[1]]/ndvi.stack[[2]]+ndvi.stack[[1]])
+
+# Rename to something informative
+names(ndvi)<-"TEAK_hsiNDVI"
+
+# Plot this to check
+plot(ndvi, main="NDVI \n Lower Teakettle, CA")
+```
+
+Combine LiDAR and HI NDVI
+```{r combine_LiDAR_and_HI}
+
+# try stacking and see what happens - different extent
+all.data<-brick(ndvi, lidar.brick)
+
+# Check the extents
+extent(ndvi)
+extent(lidar.brick)
+
+# Check the extents and crop to smaller raster
+if(extent(lidar.brick)==extent(ndvi)) {
+} else {
+    print("Extents are different, cropping data")
+    overlap<-intersect(extent(lidar.brick), extent(ndvi))
+    # now let's crop the lidar data to the HSI
+    lidar.brick<-crop(lidar.brick, overlap)
+    ndvi<-crop(ndvi, overlap)
+  }
+
+# 'intersect' can be from different packages, so be explicit about what packages to use
+
+# now stack
+all.data<-brick(ndvi, lidar.brick)
+
+#rename things
+names(all.data)<-c("NDVI", "DSM", "DTM", "CHM")
+```
+
+
+Compare HI-derived NDVI with NEON NDVI product
+
+```{r compare_HI_NEON_NDVIs}
+
+# Import NEON NDVI product
+ndvi.neon<-raster("../NEONdata/D17-California/TEAK/2013/spectrometer/veg_index/TEAK_NDVI.tif")
+
+# do extents match?
+extent(ndvi.neon)==extent(all.data)
+
+# Differencing
+ndvi.diff<- ndvi-ndvi.neon
+
+# Visulaize
+plot(ndvi.diff, main="NDVI Difference \n Teakettle, CA")
+
+# different bc NEON product is average across multiple bands to be moe comparable to Landsat or something
+
+```
+
+Function to compare extents and crop layers if they are different
+```{r same_extent}
+
+# write a function to compare extents and crop layers if they are different
+same_extent<-function(raster1, raster2) {
+  if (extent(raster1)==extent(raster2)) {
+    print("Rasters have same extent")
+  } else {
+    overlap<-raster::intersect(extent(raster1), extent(raster2))
+    # crop both rasters
+    # might be good to check which is bigger and compare
+    print("Extents are different, Cropping data")
+    raster1<-crop(raster1, overlap)
+    raster2<-crop(raster2, overlap)
+    # create a stack of the new rasters
+  }
+    raster.stack<-stack(raster1, raster2)
+    return(raster.stack)
+}
+
+
+# check our data
+same_extent(ndvi, lidar.brick)
+```
+
+Do we see taller, greener tree on North-facing slopes?
+```{r make_NS_object}
+
+# Import NEON aspect (angle a slope is facing)
+aspect<-raster("../NEONdata/D17-California/TEAK/2013/lidar/TEAK_lidarAspect.tif")
+
+# crop aspect to other data
+all.data<-same_extent(aspect, all.data)
+
+# rename
+names(all.data)<-c("Aspect", "NDVI", "DSM", "DTM", "CHM")
+
+# terrain function in raster package that can calculate aspect for you
+
+# plot aspect
+names(all.data)
+plot(all.data$Aspect)
+plot(all.data$Aspect>270)
+
+# create a classified aspect intermediate output
+# first create a matrix of values that represents the classification ranges
+# north facing = 1
+# south facing = 2
+
+class.m<-c(-1,45,1,
+           45,135,NA,
+           135,225,2,
+           225,315,NA,
+           315,360,1)
+# bottom edge is non-inclusive, so if you start at 0, 0 doesn't get reclassified
+
+# turn into matrix
+rcl.m<-matrix(class.m, ncol=3, byrow=TRUE)
+
+# classify aspect using classification matrix
+asp.ns<-reclassify(all.data$Aspect, rcl.m)
+
+plot(asp.ns)
+summary(asp.ns)
+
+# get map extent
+ns.extent<-extent(asp.ns)
+
+plot(asp.ns,
+     col=c("blue", "green"),
+     axes=FALSE,
+     main="North and South facing slopes \n Teakettle, 
+     CA", bty="n",
+     legend=FALSE
+     )
+par(xpd=TRUE) # let it write outside boundaries
+legend((par()$usr[2]+20), ns.extent@ymax-100, 
+        legend=c("North", "South"),
+       fill=c("blue", "green"),
+       bty="n")
+par(xpd=FALSE) #set it back
+```
+
+Create N- and S- facing object and mask data w it
+```{r N facing object}
+
+# create N-facing object
+north.facing<-asp.ns== 1
+north.facing[north.facing==0]<-NA
+plot(north.facing)
+
+# create S-facing object
+south.facing<-asp.ns== 2
+south.facing[south.facing==0]<-NA
+plot(south.facing)
+
+
+```
+
+# histogram of tree height
+hist(all.data$CHM, main="Distribution of Canopy Height Model (CHM) values \n Teakettle, CA", col="cornflowerblue")
+
+# get stats of all layers
+all.data.stats<- data.frame(t(summary(values(all.data), na.rm=TRUE)))
+# t transposes
+str(all.data)
+
+
+
